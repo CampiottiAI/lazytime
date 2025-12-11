@@ -38,8 +38,6 @@ class TerminalUI:
     def __init__(self, stdscr: curses.window) -> None:
         self.stdscr = stdscr
         self.entries: List[Entry] = []
-        self.selected = 0
-        self.range_mode = "today"  # or "week"
         self.message = ""
         self.message_error = False
 
@@ -51,83 +49,171 @@ class TerminalUI:
         curses.init_pair(3, curses.COLOR_GREEN, -1)  # success/info
         curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_GREEN)  # running badge
         curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW)  # idle badge
+        curses.init_pair(6, curses.COLOR_YELLOW, -1)  # idle text
         self.timeout_ms = 1000
         self.stdscr.timeout(self.timeout_ms)
         self.reload_entries()
 
     def reload_entries(self) -> None:
         self.entries = read_entries()
-        visible = self.visible_entries(utc_now())
-        if visible:
-            self.selected = min(self.selected, len(visible) - 1)
-        else:
-            self.selected = 0
 
-    def visible_entries(self, now: datetime) -> List[Entry]:
-        start, end = self.window_for_mode(now)
-        return [entry for entry in self.entries if (entry.end or now) > start and entry.start < end]
-
-    def window_for_mode(self, now: datetime) -> Tuple[datetime, datetime]:
-        tzinfo = now.astimezone().tzinfo
-        today = now.astimezone().date()
-        if self.range_mode == "week":
-            weekday = today.weekday()
-            week_start = today - timedelta(days=weekday)
-            week_end = week_start + timedelta(days=7)
-            start_local = datetime.combine(week_start, time.min, tzinfo=tzinfo)
-            end_local = datetime.combine(week_end, time.min, tzinfo=tzinfo)
-        else:
-            start_local = datetime.combine(today, time.min, tzinfo=tzinfo)
-            end_local = datetime.combine(today + timedelta(days=1), time.min, tzinfo=tzinfo)
-        return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+    def draw_box(self, y: int, x: int, height: int, width: int, title: str) -> None:
+        if height < 2 or width < 2:
+            return
+        right = x + width - 1
+        bottom = y + height - 1
+        horizontal = "-" * (width - 2)
+        try:
+            self.stdscr.addstr(y, x, "+" + horizontal + "+")
+            for row in range(y + 1, bottom):
+                self.stdscr.addstr(row, x, "|")
+                self.stdscr.addstr(row, right, "|")
+            self.stdscr.addstr(bottom, x, "+" + horizontal + "+")
+            title_text = f" {title} "
+            if len(title_text) < width - 2:
+                self.stdscr.addstr(y, x + 2, title_text)
+        except curses.error:
+            # Ignore drawing errors on very small terminals/resizes.
+            pass
 
     def draw(self) -> None:
         self.stdscr.erase()
         now = utc_now()
-        visible = self.visible_entries(now)
         height, width = self.stdscr.getmaxyx()
 
-        self.draw_header(now, width)
-        self.draw_summary(now, width)
-        self.draw_entries(visible, now, height, width)
-        self.draw_detail(visible, now, height, width)
-        self.draw_footer(width)
+        comment_height = 3
+        content_height = max(0, height - comment_height)
+        left_width = max(int(width * 0.38), 28)
+        right_width = max(width - left_width - 1, 20)
+        status_height = 3
+
+        left_remaining = max(content_height - status_height, 0)
+        day_height, week_height, top_height, empty_height = self.split_heights(left_remaining, 4)
+
+        current_y = 0
+        self.draw_status_box(current_y, 0, status_height, left_width, now)
+        current_y += status_height
+        self.draw_day_summary(current_y, 0, day_height, left_width, now)
+        current_y += day_height
+        self.draw_week_summary(current_y, 0, week_height, left_width, now)
+        current_y += week_height
+        self.draw_top_tasks(current_y, 0, top_height, left_width, now)
+        current_y += top_height
+        self.draw_empty_section(current_y, 0, empty_height, left_width)
+
+        right_x = left_width + 1
+        self.draw_current_task_box(0, right_x, content_height, right_width, now)
+        self.draw_comment_log(content_height, 0, height - content_height, width, now)
         self.stdscr.refresh()
 
-    def draw_header(self, now: datetime, width: int) -> None:
+    def draw_status_box(self, y: int, x: int, height: int, width: int, now: datetime) -> None:
+        if height < 2:
+            return
         idx = find_open(self.entries)
         if idx is None:
-            status = "[ IDLE ]"
-            badge = curses.color_pair(5) | curses.A_BOLD
-            color = curses.color_pair(3)
+            status = "IDLE"
+            status_attr = curses.color_pair(6) | curses.A_BOLD
+        else:
+            status = "WORKING"
+            status_attr = curses.color_pair(3) | curses.A_BOLD
+        title = "[1]-Status"
+        self.draw_box(y, x, height, width, title)
+        self.addstr(y + 1, x + 2, status, status_attr, width - 3)
+
+    def draw_day_summary(self, y: int, x: int, height: int, width: int, now: datetime) -> None:
+        if height < 2:
+            return
+        start_utc, end_utc = self.day_window(now)
+        summaries = self.summarize_entries(start_utc, end_utc, now)
+        self.draw_box(y, x, height, width, "[2]-Day summary")
+        inner_width = width - 2
+        max_lines = max(0, height - 2)
+        for idx, (start_local, end_local, duration, text) in enumerate(summaries[:max_lines]):
+            line = f"{start_local:%H:%M}-{end_local:%H:%M} {format_duration(duration)} {text}"
+            self.addstr(y + 1 + idx, x + 1, line, curses.A_NORMAL, inner_width)
+        if not summaries:
+            self.addstr(y + 1, x + 1, "No entries yet today.", curses.A_DIM, inner_width)
+
+    def draw_week_summary(self, y: int, x: int, height: int, width: int, now: datetime) -> None:
+        if height < 2:
+            return
+        start_utc, end_utc = self.week_window(now)
+        summaries = self.summarize_entries(start_utc, end_utc, now)
+        self.draw_box(y, x, height, width, "[3]-Week summary")
+        inner_width = width - 2
+        max_lines = max(0, height - 2)
+        for idx, (start_local, end_local, duration, text) in enumerate(summaries[:max_lines]):
+            line = f"{start_local:%a %H:%M}-{end_local:%H:%M} {format_duration(duration)} {text}"
+            self.addstr(y + 1 + idx, x + 1, line, curses.A_NORMAL, inner_width)
+        if not summaries:
+            self.addstr(y + 1, x + 1, "No entries this week yet.", curses.A_DIM, inner_width)
+
+    def draw_top_tasks(self, y: int, x: int, height: int, width: int, now: datetime) -> None:
+        if height < 2:
+            return
+        week_start, week_end = self.week_window(now)
+        top = self.top_tasks_for_range(week_start, week_end, now)
+        self.draw_box(y, x, height, width, "[4]-Top tasks")
+        inner_width = width - 2
+        max_lines = max(0, height - 2)
+        for idx, (text, duration) in enumerate(top[:max_lines]):
+            line = f"{format_duration(duration)} {text}"
+            self.addstr(y + 1 + idx, x + 1, line, curses.A_NORMAL, inner_width)
+        if not top:
+            self.addstr(y + 1, x + 1, "No tracked time yet.", curses.A_DIM, inner_width)
+
+    def draw_empty_section(self, y: int, x: int, height: int, width: int) -> None:
+        if height < 2:
+            return
+        self.draw_box(y, x, height, width, "[5]-Stash")
+
+    def draw_current_task_box(self, y: int, x: int, height: int, width: int, now: datetime) -> None:
+        if height < 2:
+            return
+        self.draw_box(y, x, height, width, "[0]-Current task")
+        inner_width = max(0, width - 2)
+        inner_height = max(0, height - 2)
+        idx = find_open(self.entries)
+        tzinfo = now.astimezone().tzinfo
+        if idx is None:
+            lines = ["No active task."]
+            closed = next((entry for entry in reversed(self.entries) if entry.end is not None), None)
+            if closed:
+                lines.append("")
+                lines.append(f"Last: {closed.text}")
+                lines.append(f"Ended: {closed.end.astimezone(tzinfo):%Y-%m-%d %H:%M}")
+                lines.append(f"Length: {format_duration(closed.duration(closed.end))}")
         else:
             entry = self.entries[idx]
-            elapsed = format_duration(entry.duration(now))
-            status = f"[ RUNNING {elapsed} ]"
-            badge = curses.color_pair(4) | curses.A_BOLD
-            color = curses.color_pair(3) | curses.A_BOLD
-        title = f"pytimelog  [{self.range_mode.upper()} VIEW]"
-        self.addstr(0, 0, title, color, width)
-        self.addstr(1, 0, status, badge, width)
-        if idx is not None:
-            self.addstr(2, 0, f"Now: '{self.entries[idx].text}'", color, width)
-        self.addstr(3, 0, "", curses.A_NORMAL, width)
+            start_local = entry.start.astimezone(tzinfo)
+            elapsed = entry.duration(now)
+            lines = [
+                f"Task: {entry.text}",
+                f"Start: {start_local:%Y-%m-%d %H:%M}",
+                f"Elapsed: {format_duration(elapsed)}",
+            ]
+            tags = ", ".join(entry.tags()) or "(untagged)"
+            lines.append(f"Tags: {tags}")
+        self.render_wrapped(lines, y + 1, x + 1, inner_height, inner_width)
 
-    def draw_summary(self, now: datetime, width: int) -> None:
-        today_start, today_end = self.window_for_mode(now) if self.range_mode == "today" else self.day_window(now)
+    def draw_comment_log(self, y: int, x: int, height: int, width: int, now: datetime) -> None:
+        if height < 2:
+            return
+        self.draw_box(y, x, height, width, "Comment log")
+        today_start, today_end = self.day_window(now)
         week_start, week_end = self.week_window(now)
         today_total = self.total_for_range(today_start, today_end, now)
         week_total = self.total_for_range(week_start, week_end, now)
         remaining_today = max(timedelta(hours=8) - today_total, timedelta(0))
         remaining_week = max(timedelta(hours=40) - week_total, timedelta(0))
         line = (
-            f"Today {format_duration(today_total)} / 08:00 "
-            f"(remaining {format_duration(remaining_today)})   "
-            f"Week {format_duration(week_total)} / 40:00 "
-            f"(remaining {format_duration(remaining_week)})"
+            f"Remaining today: {format_duration(remaining_today)} to hit 08:00"
+            f" | Remaining week: {format_duration(remaining_week)} to hit 40:00"
         )
-        self.addstr(4, 0, line, curses.A_BOLD, width)
-        self.addstr(5, 0, "", curses.A_NORMAL, width)
+        self.addstr(y + 1, x + 1, line, curses.A_NORMAL, width - 2)
+        if height >= 3:
+            message_attr = curses.color_pair(2) if self.message_error else curses.color_pair(3)
+            self.addstr(y + 2, x + 1, self.message, message_attr, width - 2)
 
     def day_window(self, now: datetime) -> Tuple[datetime, datetime]:
         tzinfo = now.astimezone().tzinfo
@@ -152,68 +238,6 @@ class TerminalUI:
             total += clamp_duration(entry, start_utc, end_utc, now)
         return total
 
-    def draw_entries(self, visible: List[Entry], now: datetime, height: int, width: int) -> None:
-        list_top = 7
-        list_height = max(height - list_top - 2, 3)
-        list_width = max(int(width * 0.6), 20)
-        tzinfo = now.astimezone().tzinfo
-        header = "Entries (current view)".ljust(list_width - 1)
-        self.addstr(list_top - 1, 0, header, curses.A_UNDERLINE, list_width)
-
-        start_index = max(0, self.selected - list_height + 1)
-        for idx, entry in enumerate(visible[start_index : start_index + list_height]):
-            actual_index = start_index + idx
-            line = self.format_entry_line(entry, now, tzinfo)
-            attr = curses.color_pair(1) if actual_index == self.selected else curses.A_NORMAL
-            self.addstr(list_top + idx, 0, line, attr, list_width)
-
-        if not visible:
-            self.addstr(list_top, 0, "No entries in this view.", curses.A_DIM, list_width)
-
-    def format_entry_line(self, entry: Entry, now: datetime, tzinfo) -> str:
-        start_local = entry.start.astimezone(tzinfo)
-        end_local = (entry.end or now).astimezone(tzinfo)
-        duration = format_duration(entry.duration(now))
-        end_label = end_local.strftime("%H:%M") if entry.end else "…"
-        return f"{start_local:%H:%M}-{end_label} {duration} {entry.text}"
-
-    def draw_detail(self, visible: List[Entry], now: datetime, height: int, width: int) -> None:
-        detail_left = max(int(width * 0.6) + 1, 22)
-        detail_width = max(width - detail_left - 1, 20)
-        self.addstr(6, detail_left, "Details", curses.A_UNDERLINE, detail_width)
-        if not visible:
-            return
-        entry = visible[self.selected]
-        tzinfo = now.astimezone().tzinfo
-        start_local = entry.start.astimezone(tzinfo).strftime("%Y-%m-%d %H:%M")
-        end_local = (entry.end or now).astimezone(tzinfo).strftime("%Y-%m-%d %H:%M") if entry.end else "Running"
-        duration = format_duration(entry.duration(now))
-        tags = ", ".join(entry.tags()) or "(untagged)"
-
-        lines = [
-            f"Start   {start_local}",
-            f"End     {end_local}",
-            f"Length  {duration}",
-            f"Tags    {tags}",
-            "",
-            "Text:",
-        ]
-        for offset, line in enumerate(lines):
-            self.addstr(7 + offset, detail_left, line, curses.A_NORMAL, detail_width)
-
-        wrapped = textwrap.wrap(entry.text, width=detail_width - 1)
-        for idx, segment in enumerate(wrapped):
-            if 7 + len(lines) + idx >= height - 3:
-                break
-            self.addstr(7 + len(lines) + idx, detail_left, segment, curses.A_NORMAL, detail_width)
-
-    def draw_footer(self, width: int) -> None:
-        height, _ = self.stdscr.getmaxyx()
-        help_line = "[↑/k ↓/j] move  [n] start  [x] stop  [r] reload  [v] toggle view  [q] quit"
-        message_attr = curses.color_pair(2) if self.message_error else curses.color_pair(3)
-        self.addstr(height - 2, 0, self.message, message_attr, width)
-        self.addstr(height - 1, 0, help_line, curses.A_DIM, width)
-
     def addstr(self, y: int, x: int, text: str, attr: int, width: int) -> None:
         height, total_width = self.stdscr.getmaxyx()
         if y < 0 or y >= height:
@@ -227,12 +251,69 @@ class TerminalUI:
             # Ignore drawing errors on very small terminals/resizes.
             pass
 
-    def move_selection(self, delta: int, now: datetime) -> None:
-        visible = self.visible_entries(now)
-        if not visible:
-            self.selected = 0
+    def split_heights(self, total: int, parts: int, min_height: int = 3) -> List[int]:
+        if parts <= 0 or total <= 0:
+            return [0] * parts
+        heights: List[int] = []
+        remaining = total
+        for index in range(parts):
+            parts_left = parts - index
+            min_after = (parts_left - 1) * min_height
+            desired = remaining - min_after
+            height_for_section = min(remaining, max(min_height, desired))
+            heights.append(height_for_section)
+            remaining -= height_for_section
+        if remaining > 0 and heights:
+            heights[-1] += remaining
+        return heights
+
+    def summarize_entries(
+        self, start_utc: datetime, end_utc: datetime, now: datetime
+    ) -> List[Tuple[datetime, datetime, timedelta, str]]:
+        tzinfo = now.astimezone().tzinfo
+        rows: List[Tuple[datetime, datetime, timedelta, str]] = []
+        for entry in self.entries:
+            if entry.end is None:
+                continue
+            overlap = clamp_duration(entry, start_utc, end_utc, now)
+            if overlap <= timedelta(0):
+                continue
+            local_start = max(entry.start, start_utc).astimezone(tzinfo)
+            local_end = min(entry.end, end_utc).astimezone(tzinfo)
+            rows.append((local_start, local_end, overlap, entry.text))
+        rows.sort(key=lambda row: row[0])
+        return rows
+
+    def top_tasks_for_range(
+        self, start_utc: datetime, end_utc: datetime, now: datetime, limit: int = 6
+    ) -> List[Tuple[str, timedelta]]:
+        totals: dict[str, timedelta] = {}
+        for entry in self.entries:
+            duration = clamp_duration(entry, start_utc, end_utc, now)
+            if duration <= timedelta(0):
+                continue
+            totals[entry.text] = totals.get(entry.text, timedelta(0)) + duration
+        ordered = sorted(totals.items(), key=lambda item: item[1], reverse=True)
+        return ordered[:limit]
+
+    def render_wrapped(
+        self,
+        lines: List[str],
+        y: int,
+        x: int,
+        max_height: int,
+        max_width: int,
+        attr: int = curses.A_NORMAL,
+    ) -> None:
+        if max_height <= 0 or max_width <= 0:
             return
-        self.selected = max(0, min(self.selected + delta, len(visible) - 1))
+        current_row = y
+        for line in lines:
+            for segment in textwrap.wrap(line, width=max_width):
+                if current_row >= y + max_height:
+                    return
+                self.addstr(current_row, x, segment, attr, max_width)
+                current_row += 1
 
     def prompt(self, prompt_text: str) -> tuple[str, bool]:
         """Prompt for input; returns (text, cancelled). Esc cancels."""
@@ -304,21 +385,13 @@ class TerminalUI:
                 continue
             if key in (ord("q"), 27):
                 break
-            if key in (curses.KEY_UP, ord("k")):
-                self.move_selection(-1, now)
-            elif key in (curses.KEY_DOWN, ord("j")):
-                self.move_selection(1, now)
-            elif key == ord("n"):
+            if key == ord("n"):
                 self.start_entry()
             elif key == ord("x"):
                 self.stop_entry()
             elif key == ord("r"):
                 self.reload_entries()
                 self.notify("Reloaded log.", False)
-            elif key == ord("v"):
-                self.range_mode = "week" if self.range_mode == "today" else "today"
-                self.selected = 0
-                self.notify(f"Switched to {self.range_mode} view.", False)
 
 
 def launch_tui() -> None:

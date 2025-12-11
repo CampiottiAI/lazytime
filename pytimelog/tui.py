@@ -49,6 +49,8 @@ class TerminalUI:
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)  # selection
         curses.init_pair(2, curses.COLOR_RED, -1)  # errors
         curses.init_pair(3, curses.COLOR_GREEN, -1)  # success/info
+        curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_GREEN)  # running badge
+        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW)  # idle badge
         self.timeout_ms = 1000
         self.stdscr.timeout(self.timeout_ms)
         self.reload_entries()
@@ -95,15 +97,21 @@ class TerminalUI:
     def draw_header(self, now: datetime, width: int) -> None:
         idx = find_open(self.entries)
         if idx is None:
-            status = "Status: idle"
+            status = "[ IDLE ]"
+            badge = curses.color_pair(5) | curses.A_BOLD
             color = curses.color_pair(3)
         else:
             entry = self.entries[idx]
             elapsed = format_duration(entry.duration(now))
-            status = f"Status: running '{entry.text}' ({elapsed})"
-            color = curses.color_pair(1)
-        self.addstr(0, 0, f"pytimelog  [{self.range_mode.upper()} VIEW]", color, width)
-        self.addstr(1, 0, status, color, width)
+            status = f"[ RUNNING {elapsed} ]"
+            badge = curses.color_pair(4) | curses.A_BOLD
+            color = curses.color_pair(3) | curses.A_BOLD
+        title = f"pytimelog  [{self.range_mode.upper()} VIEW]"
+        self.addstr(0, 0, title, color, width)
+        self.addstr(1, 0, status, badge, width)
+        if idx is not None:
+            self.addstr(2, 0, f"Now: '{self.entries[idx].text}'", color, width)
+        self.addstr(3, 0, "", curses.A_NORMAL, width)
 
     def draw_summary(self, now: datetime, width: int) -> None:
         today_start, today_end = self.window_for_mode(now) if self.range_mode == "today" else self.day_window(now)
@@ -118,7 +126,8 @@ class TerminalUI:
             f"Week {format_duration(week_total)} / 40:00 "
             f"(remaining {format_duration(remaining_week)})"
         )
-        self.addstr(2, 0, line, curses.A_BOLD, width)
+        self.addstr(4, 0, line, curses.A_BOLD, width)
+        self.addstr(5, 0, "", curses.A_NORMAL, width)
 
     def day_window(self, now: datetime) -> Tuple[datetime, datetime]:
         tzinfo = now.astimezone().tzinfo
@@ -144,8 +153,8 @@ class TerminalUI:
         return total
 
     def draw_entries(self, visible: List[Entry], now: datetime, height: int, width: int) -> None:
-        list_top = 4
-        list_height = max(height - 6, 3)
+        list_top = 7
+        list_height = max(height - list_top - 2, 3)
         list_width = max(int(width * 0.6), 20)
         tzinfo = now.astimezone().tzinfo
         header = "Entries (current view)".ljust(list_width - 1)
@@ -171,7 +180,7 @@ class TerminalUI:
     def draw_detail(self, visible: List[Entry], now: datetime, height: int, width: int) -> None:
         detail_left = max(int(width * 0.6) + 1, 22)
         detail_width = max(width - detail_left - 1, 20)
-        self.addstr(3, detail_left, "Details", curses.A_UNDERLINE, detail_width)
+        self.addstr(6, detail_left, "Details", curses.A_UNDERLINE, detail_width)
         if not visible:
             return
         entry = visible[self.selected]
@@ -190,13 +199,13 @@ class TerminalUI:
             "Text:",
         ]
         for offset, line in enumerate(lines):
-            self.addstr(4 + offset, detail_left, line, curses.A_NORMAL, detail_width)
+            self.addstr(7 + offset, detail_left, line, curses.A_NORMAL, detail_width)
 
         wrapped = textwrap.wrap(entry.text, width=detail_width - 1)
         for idx, segment in enumerate(wrapped):
-            if 4 + len(lines) + idx >= height - 3:
+            if 7 + len(lines) + idx >= height - 3:
                 break
-            self.addstr(4 + len(lines) + idx, detail_left, segment, curses.A_NORMAL, detail_width)
+            self.addstr(7 + len(lines) + idx, detail_left, segment, curses.A_NORMAL, detail_width)
 
     def draw_footer(self, width: int) -> None:
         height, _ = self.stdscr.getmaxyx()

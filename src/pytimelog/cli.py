@@ -157,8 +157,23 @@ def command_report(args: argparse.Namespace) -> None:
     tz = local_now().tzinfo
     today = local_now().date()
 
-    from_date = parse_date(args.from_date) if args.from_date else today
-    to_date = parse_date(args.to_date) if args.to_date else from_date
+    if args.week and args.last_week:
+        raise SystemExit("Choose only one of --week or --last-week.")
+    if (args.week or args.last_week) and (args.from_date or args.to_date):
+        raise SystemExit("Cannot combine --week/--last-week with --from/--to.")
+
+    if args.week:
+        weekday = today.weekday()  # Monday=0
+        from_date = today - timedelta(days=weekday)
+        to_date = from_date + timedelta(days=6)
+    elif args.last_week:
+        weekday = today.weekday()
+        this_week_start = today - timedelta(days=weekday)
+        from_date = this_week_start - timedelta(days=7)
+        to_date = from_date + timedelta(days=6)
+    else:
+        from_date = parse_date(args.from_date) if args.from_date else today
+        to_date = parse_date(args.to_date) if args.to_date else from_date
     if to_date < from_date:
         raise SystemExit("Report end date cannot be before start date.")
 
@@ -228,6 +243,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--to",
         dest="to_date",
         help="End date (YYYY-MM-DD). Defaults to start date.",
+    )
+    report_parser.add_argument(
+        "--week",
+        action="store_true",
+        help="Current week (Mon-Sun).",
+    )
+    report_parser.add_argument(
+        "--last-week",
+        action="store_true",
+        help="Previous week (Mon-Sun).",
     )
     report_parser.set_defaults(func=command_report)
 

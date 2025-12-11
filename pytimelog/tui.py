@@ -40,6 +40,9 @@ class TerminalUI:
         self.entries: List[Entry] = []
         self.message = ""
         self.message_error = False
+        self.focus_section = "day"  # "day" or "week"
+        self.day_offset = 0
+        self.week_offset = 0
 
         curses.curs_set(0)
         curses.start_color()
@@ -93,9 +96,8 @@ class TerminalUI:
         self.stdscr.erase()
         now = utc_now()
         height, width = self.stdscr.getmaxyx()
-
-        comment_height = 3
-        content_height = max(0, height - comment_height)
+        footer_height = 2
+        content_height = max(0, height - footer_height)
         left_width = max(int(width * 0.38), 28)
         right_width = max(width - left_width - 1, 20)
         status_height = 3
@@ -113,8 +115,13 @@ class TerminalUI:
         self.draw_top_tasks(current_y, 0, top_height, left_width, now)
 
         right_x = left_width + 1
-        self.draw_current_task_box(0, right_x, content_height, right_width, now)
-        self.draw_comment_log(content_height, 0, height - content_height, width, now)
+        min_current_height = 6
+        comment_box_height = min(top_height, max(content_height - min_current_height, 0))
+        current_task_height = max(content_height - comment_box_height, min_current_height)
+
+        self.draw_current_task_box(0, right_x, current_task_height, right_width, now)
+        self.draw_comment_log(current_task_height, right_x, comment_box_height, right_width, now)
+        self.draw_footer(content_height, width)
         self.stdscr.refresh()
 
     def draw_status_box(self, y: int, x: int, height: int, width: int, now: datetime) -> None:
@@ -136,10 +143,18 @@ class TerminalUI:
             return
         start_utc, end_utc = self.day_window(now)
         summaries = self.summarize_entries(start_utc, end_utc, now)
-        self.draw_box(y, x, height, width, "[2]-Day summary")
+        title = "[2]-Day summary"
+        if self.focus_section == "day":
+            title += " (scroll)"
+        self.draw_box(y, x, height, width, title)
         inner_width = width - 2
         max_lines = max(0, height - 2)
-        for idx, (start_local, end_local, duration, text) in enumerate(summaries[:max_lines]):
+        if max_lines <= 0:
+            return
+        clamped_offset = min(self.day_offset, max(0, len(summaries) - max_lines))
+        self.day_offset = clamped_offset
+        view = summaries[clamped_offset : clamped_offset + max_lines]
+        for idx, (start_local, end_local, duration, text) in enumerate(view):
             line = f"{start_local:%H:%M}-{end_local:%H:%M} {format_duration(duration)} {text}"
             self.addstr(y + 1 + idx, x + 1, line, curses.A_NORMAL, inner_width)
         if not summaries:
@@ -150,10 +165,18 @@ class TerminalUI:
             return
         start_utc, end_utc = self.week_window(now)
         summaries = self.summarize_entries(start_utc, end_utc, now)
-        self.draw_box(y, x, height, width, "[3]-Week summary")
+        title = "[3]-Week summary"
+        if self.focus_section == "week":
+            title += " (scroll)"
+        self.draw_box(y, x, height, width, title)
         inner_width = width - 2
         max_lines = max(0, height - 2)
-        for idx, (start_local, end_local, duration, text) in enumerate(summaries[:max_lines]):
+        if max_lines <= 0:
+            return
+        clamped_offset = min(self.week_offset, max(0, len(summaries) - max_lines))
+        self.week_offset = clamped_offset
+        view = summaries[clamped_offset : clamped_offset + max_lines]
+        for idx, (start_local, end_local, duration, text) in enumerate(view):
             line = f"{start_local:%a %H:%M}-{end_local:%H:%M} {format_duration(duration)} {text}"
             self.addstr(y + 1 + idx, x + 1, line, curses.A_NORMAL, inner_width)
         if not summaries:
@@ -210,16 +233,38 @@ class TerminalUI:
         week_start, week_end = self.week_window(now)
         today_total = self.total_for_range(today_start, today_end, now)
         week_total = self.total_for_range(week_start, week_end, now)
-        remaining_today = max(timedelta(hours=8) - today_total, timedelta(0))
-        remaining_week = max(timedelta(hours=40) - week_total, timedelta(0))
-        line = (
-            f"Remaining today: {format_duration(remaining_today)} to hit 08:00"
-            f" | Remaining week: {format_duration(remaining_week)} to hit 40:00"
+        target_today = timedelta(hours=8)
+        target_week = timedelta(hours=40)
+        delta_today = target_today - today_total
+        delta_week = target_week - week_total
+
+        today_attr = curses.color_pair(2) if delta_today > timedelta(0) else curses.color_pair(3)
+        week_attr = curses.color_pair(2) if delta_week > timedelta(0) else curses.color_pair(3)
+
+        today_text = (
+            f"Remaining today: {format_duration(delta_today)} to hit 08:00"
+            if delta_today > timedelta(0)
+            else f"Remaining today: +{format_duration(-delta_today)} over 08:00"
         )
-        self.addstr(y + 1, x + 1, line, curses.A_NORMAL, width - 2)
+        week_text = (
+            f"Remaining week: {format_duration(delta_week)} to hit 40:00"
+            if delta_week > timedelta(0)
+            else f"Remaining week: +{format_duration(-delta_week)} over 40:00"
+        )
+
+        inner_width = width - 2
+        self.addstr(y + 1, x + 1, today_text, today_attr, inner_width)
         if height >= 3:
+            self.addstr(y + 2, x + 1, week_text, week_attr, inner_width)
+        if height >= 4:
             message_attr = curses.color_pair(2) if self.message_error else curses.color_pair(3)
-            self.addstr(y + 2, x + 1, self.message, message_attr, width - 2)
+            self.addstr(y + 3, x + 1, self.message, message_attr, inner_width)
+
+    def draw_footer(self, y: int, width: int) -> None:
+        help_line = "[Tab] switch scroll target  [↑/↓] scroll  [n] start  [x] stop  [r] reload  [q] quit"
+        action_line = "Actions: start new task, stop current, reload log"
+        self.addstr(y, 0, help_line, curses.A_DIM, width)
+        self.addstr(y + 1, 0, action_line, curses.A_DIM, width)
 
     def day_window(self, now: datetime) -> Tuple[datetime, datetime]:
         tzinfo = now.astimezone().tzinfo
@@ -304,7 +349,7 @@ class TerminalUI:
             local_start = max(entry.start, start_utc).astimezone(tzinfo)
             local_end = min(entry.end, end_utc).astimezone(tzinfo)
             rows.append((local_start, local_end, overlap, entry.text))
-        rows.sort(key=lambda row: row[0])
+        rows.sort(key=lambda row: row[0], reverse=True)
         return rows
 
     def top_tasks_for_range(
@@ -344,18 +389,29 @@ class TerminalUI:
         """Prompt for input; returns (text, cancelled). Esc cancels."""
         height, width = self.stdscr.getmaxyx()
         buffer: List[str] = []
+        box_width = max(30, min(width - 4, len(prompt_text) + 20))
+        box_height = 5
+        start_y = max((height - box_height) // 2, 0)
+        start_x = max((width - box_width) // 2, 0)
+        win = curses.newwin(box_height, box_width, start_y, start_x)
+        win.keypad(True)
+
         curses.curs_set(1)
         self.stdscr.timeout(-1)  # block while typing so we don't auto-cancel
         try:
             while True:
-                line = f"{prompt_text}{''.join(buffer)}"
-                self.addstr(height - 2, 0, line, curses.A_BOLD, width)
-                self.stdscr.move(height - 2, min(len(line), width - 1))
-                ch = self.stdscr.getch()
+                win.erase()
+                win.box()
+                win.addstr(1, 2, prompt_text[: box_width - 4], curses.A_BOLD)
+                display = "".join(buffer)
+                win.addstr(2, 2, display[: box_width - 4])
+                win.move(2, min(2 + len(display), box_width - 3))
+                win.refresh()
+                ch = win.getch()
                 if ch in (27,):  # Esc
                     return "", True
                 if ch in (10, 13):  # Enter
-                    return "".join(buffer).strip(), False
+                    return display.strip(), False
                 if ch in (curses.KEY_BACKSPACE, 127, 8):
                     if buffer:
                         buffer.pop()
@@ -401,6 +457,12 @@ class TerminalUI:
         self.reload_entries()
         self.notify(f"Stopped: {open_entry.text}", False)
 
+    def scroll_active(self, delta: int) -> None:
+        if self.focus_section == "day":
+            self.day_offset = max(0, self.day_offset + delta)
+        else:
+            self.week_offset = max(0, self.week_offset + delta)
+
     def loop(self) -> None:
         while True:
             now = utc_now()
@@ -410,6 +472,12 @@ class TerminalUI:
                 continue
             if key in (ord("q"), 27):
                 break
+            if key in (curses.KEY_UP, ord("k")):
+                self.scroll_active(-1)
+            elif key in (curses.KEY_DOWN, ord("j")):
+                self.scroll_active(1)
+            elif key in (ord("\t"),):
+                self.focus_section = "week" if self.focus_section == "day" else "day"
             if key == ord("n"):
                 self.start_entry()
             elif key == ord("x"):

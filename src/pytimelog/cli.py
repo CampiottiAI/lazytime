@@ -179,6 +179,12 @@ def command_report(args: argparse.Namespace) -> None:
     print(f"Total: {format_duration(total)}")
 
 
+def command_ui(_: argparse.Namespace) -> None:
+    from .ui import launch_ui
+
+    launch_ui()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Tiny time logger inspired by gtimelog.",
@@ -224,6 +230,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="End date (YYYY-MM-DD). Defaults to start date.",
     )
     report_parser.set_defaults(func=command_report)
+
+    ui_parser = subparsers.add_parser("ui", help="Launch windowed UI.")
+    ui_parser.set_defaults(func=command_ui)
 
     return parser
 

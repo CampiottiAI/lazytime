@@ -20,5 +20,10 @@ pytimelog report --from 2024-01-01 --to 2024-01-07
 - `add --start TIME --end TIME <text>` — add a finished entry retroactively; rejects overlaps.
 - `status` — show the current running entry, if any.
 - `report [--from DATE] [--to DATE]` — totals by tag for a date or range (local dates, UTC storage).
+- `ui` — open a small Tk window to start/stop and view today's entries.
 
 Tags are parsed from `#tag` words in the text. Entries without tags roll up under `(untagged)`.
+
+## UI mode
+
+The `ui` command launches a simple window similar to gtimelog: type what you're doing and click **Start**, click **Stop** to finish, and see today's entries listed with durations. It uses the same log file as the CLI. Requires Tk (bundled with most Python installs).

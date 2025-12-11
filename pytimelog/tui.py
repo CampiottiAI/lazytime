@@ -94,6 +94,36 @@ class TerminalUI:
             # Ignore drawing errors on very small terminals/resizes.
             pass
 
+    def draw_window_box(self, win: curses.window, height: int, width: int, title: str) -> None:
+        """Draw a titled box on an arbitrary window."""
+        if height < 2 or width < 2:
+            return
+        ul = getattr(curses, "ACS_ULCORNER", ord("+"))
+        ur = getattr(curses, "ACS_URCORNER", ord("+"))
+        ll = getattr(curses, "ACS_LLCORNER", ord("+"))
+        lr = getattr(curses, "ACS_LRCORNER", ord("+"))
+        hline = getattr(curses, "ACS_HLINE", ord("-"))
+        vline = getattr(curses, "ACS_VLINE", ord("|"))
+        try:
+            win.addch(0, 0, ul, curses.A_BOLD)
+            for col in range(1, width - 1):
+                win.addch(0, col, hline, curses.A_BOLD)
+            win.addch(0, width - 1, ur, curses.A_BOLD)
+
+            for row in range(1, height - 1):
+                win.addch(row, 0, vline, curses.A_BOLD)
+                win.addch(row, width - 1, vline, curses.A_BOLD)
+
+            win.addch(height - 1, 0, ll, curses.A_BOLD)
+            for col in range(1, width - 1):
+                win.addch(height - 1, col, hline, curses.A_BOLD)
+            win.addch(height - 1, width - 1, lr, curses.A_BOLD)
+            title_text = f" {title} "
+            if len(title_text) < width - 2:
+                win.addstr(0, 2, title_text, curses.A_BOLD)
+        except curses.error:
+            pass
+
     def draw(self) -> None:
         self.stdscr.erase()
         now = utc_now()
@@ -400,13 +430,15 @@ class TerminalUI:
         win = curses.newwin(box_height, box_width, start_y, start_x)
         win.keypad(True)
 
+        title = prompt_text.rstrip(": ").strip() or "Input"
+
         curses.curs_set(1)
         self.stdscr.timeout(-1)  # block while typing so we don't auto-cancel
         try:
             while True:
                 win.erase()
-                win.box()
-                win.addstr(1, 2, prompt_text[: box_width - 4], curses.A_BOLD)
+                self.draw_window_box(win, box_height, box_width, title)
+                win.addstr(1, 2, "Description:"[: box_width - 4], curses.A_DIM)
                 display = "".join(buffer)
                 win.addstr(2, 2, display[: box_width - 4])
                 win.move(2, min(2 + len(display), box_width - 3))

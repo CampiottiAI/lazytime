@@ -101,7 +101,7 @@ class TerminalUI:
         status_height = 3
 
         left_remaining = max(content_height - status_height, 0)
-        day_height, week_height, top_height, empty_height = self.split_heights(left_remaining, 4)
+        day_height, week_height, top_height = self.allocate_left_heights(left_remaining)
 
         current_y = 0
         self.draw_status_box(current_y, 0, status_height, left_width, now)
@@ -111,8 +111,6 @@ class TerminalUI:
         self.draw_week_summary(current_y, 0, week_height, left_width, now)
         current_y += week_height
         self.draw_top_tasks(current_y, 0, top_height, left_width, now)
-        current_y += top_height
-        self.draw_empty_section(current_y, 0, empty_height, left_width)
 
         right_x = left_width + 1
         self.draw_current_task_box(0, right_x, content_height, right_width, now)
@@ -166,7 +164,7 @@ class TerminalUI:
             return
         week_start, week_end = self.week_window(now)
         top = self.top_tasks_for_range(week_start, week_end, now)
-        self.draw_box(y, x, height, width, "[4]-Top tasks")
+        self.draw_box(y, x, height, width, "[4]-Top tags")
         inner_width = width - 2
         max_lines = max(0, height - 2)
         for idx, (text, duration) in enumerate(top[:max_lines]):
@@ -174,11 +172,6 @@ class TerminalUI:
             self.addstr(y + 1 + idx, x + 1, line, curses.A_NORMAL, inner_width)
         if not top:
             self.addstr(y + 1, x + 1, "No tracked time yet.", curses.A_DIM, inner_width)
-
-    def draw_empty_section(self, y: int, x: int, height: int, width: int) -> None:
-        if height < 2:
-            return
-        self.draw_box(y, x, height, width, "[5]-Stash")
 
     def draw_current_task_box(self, y: int, x: int, height: int, width: int, now: datetime) -> None:
         if height < 2:
@@ -264,21 +257,38 @@ class TerminalUI:
             # Ignore drawing errors on very small terminals/resizes.
             pass
 
-    def split_heights(self, total: int, parts: int, min_height: int = 3) -> List[int]:
-        if parts <= 0 or total <= 0:
-            return [0] * parts
-        heights: List[int] = []
-        remaining = total
-        for index in range(parts):
-            parts_left = parts - index
-            min_after = (parts_left - 1) * min_height
-            desired = remaining - min_after
-            height_for_section = min(remaining, max(min_height, desired))
-            heights.append(height_for_section)
-            remaining -= height_for_section
-        if remaining > 0 and heights:
-            heights[-1] += remaining
-        return heights
+    def allocate_left_heights(self, total: int) -> Tuple[int, int, int]:
+        """Allocate height across day/week/top with bias to week/top."""
+        if total <= 0:
+            return 0, 0, 0
+        mins = [3, 5, 4]  # day, week, top
+        base_sum = sum(mins)
+        if total <= base_sum:
+            # Fit into available space while keeping order.
+            return tuple(self._shrink_to_total(mins, total))
+        remaining = total - base_sum
+        weights = [2, 3, 3]  # favor week/top
+        total_weight = sum(weights)
+        extra_day = int(remaining * weights[0] / total_weight)
+        extra_week = int(remaining * weights[1] / total_weight)
+        extra_top = remaining - extra_day - extra_week
+        return (
+            mins[0] + extra_day,
+            mins[1] + extra_week,
+            mins[2] + extra_top,
+        )
+
+    def _shrink_to_total(self, values: List[int], total: int) -> List[int]:
+        if total <= 0:
+            return [0] * len(values)
+        result = values[:]
+        while sum(result) > total and any(v > 1 for v in result):
+            for idx in range(len(result)):
+                if sum(result) <= total:
+                    break
+                if result[idx] > 1:
+                    result[idx] -= 1
+        return result
 
     def summarize_entries(
         self, start_utc: datetime, end_utc: datetime, now: datetime
@@ -305,7 +315,9 @@ class TerminalUI:
             duration = clamp_duration(entry, start_utc, end_utc, now)
             if duration <= timedelta(0):
                 continue
-            totals[entry.text] = totals.get(entry.text, timedelta(0)) + duration
+            tags = entry.tags() or ["(untagged)"]
+            for tag in tags:
+                totals[tag] = totals.get(tag, timedelta(0)) + duration
         ordered = sorted(totals.items(), key=lambda item: item[1], reverse=True)
         return ordered[:limit]
 

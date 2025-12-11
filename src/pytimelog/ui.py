@@ -25,6 +25,12 @@ def format_duration(delta: timedelta) -> str:
     return f"{hours}h{minutes:02d}m"
 
 
+def format_hhmm(delta: timedelta) -> str:
+    total_minutes = int(delta.total_seconds() // 60)
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours:02d}:{minutes:02d}"
+
+
 def format_entry_line(entry: Entry, now: datetime, tzinfo) -> str:
     start_local = entry.start.astimezone(tzinfo)
     end_local = (entry.end or now).astimezone(tzinfo)
@@ -44,6 +50,9 @@ class TimeLogApp:
 
         self.status_label = tk.Label(root, text="Loading…", anchor="w", font=("Helvetica", 12))
         self.status_label.pack(fill="x", padx=8, pady=(8, 4))
+
+        self.summary_label = tk.Label(root, text="", anchor="w", font=("Helvetica", 11))
+        self.summary_label.pack(fill="x", padx=8, pady=(0, 6))
 
         form = tk.Frame(root)
         form.pack(fill="x", padx=8, pady=4)
@@ -75,18 +84,17 @@ class TimeLogApp:
         idx = find_open(self.entries)
         if idx is None:
             self.status_label.config(text="Status: idle")
-            return
-        entry = self.entries[idx]
-        elapsed = entry.duration(now)
-        self.status_label.config(
-            text=f"Status: running '{entry.text}' ({format_duration(elapsed)} elapsed)"
-        )
+        else:
+            entry = self.entries[idx]
+            elapsed = entry.duration(now)
+            self.status_label.config(
+                text=f"Status: running '{entry.text}' ({format_duration(elapsed)} elapsed)"
+            )
+        self.render_summary(now)
 
     def render_today(self, now: datetime) -> None:
         tzinfo = now.astimezone().tzinfo
-        today = now.astimezone().date()
-        start_local = datetime.combine(today, time.min, tzinfo=tzinfo).astimezone(timezone.utc)
-        end_local = datetime.combine(today + timedelta(days=1), time.min, tzinfo=tzinfo).astimezone(timezone.utc)
+        start_local, end_local = self.today_window(now)
 
         self.listbox.delete(0, tk.END)
         for entry in self.entries:
@@ -95,6 +103,32 @@ class TimeLogApp:
                 continue
             line = format_entry_line(entry, now, tzinfo)
             self.listbox.insert(tk.END, line)
+
+    def today_window(self, now: datetime) -> tuple[datetime, datetime]:
+        tzinfo = now.astimezone().tzinfo
+        today = now.astimezone().date()
+        start_local = datetime.combine(today, time.min, tzinfo=tzinfo).astimezone(timezone.utc)
+        end_local = datetime.combine(today + timedelta(days=1), time.min, tzinfo=tzinfo).astimezone(timezone.utc)
+        return start_local, end_local
+
+    def render_summary(self, now: datetime) -> None:
+        start_local, end_local = self.today_window(now)
+        total = timedelta(0)
+        for entry in self.entries:
+            entry_end = entry.end or now
+            latest_start = max(entry.start, start_local)
+            earliest_end = min(entry_end, end_local)
+            if earliest_end <= latest_start:
+                continue
+            total += earliest_end - latest_start
+
+        target = timedelta(hours=8)
+        remaining = target - total
+        if remaining < timedelta(0):
+            remaining = timedelta(0)
+        self.summary_label.config(
+            text=f"Today: {format_hhmm(total)} worked, {format_hhmm(remaining)} remaining to 08:00"
+        )
 
     def start_entry(self) -> None:
         text = self.entry_text.get().strip()

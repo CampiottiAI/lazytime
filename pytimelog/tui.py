@@ -104,23 +104,45 @@ class TerminalUI:
         lr = getattr(curses, "ACS_LRCORNER", ord("+"))
         hline = getattr(curses, "ACS_HLINE", ord("-"))
         vline = getattr(curses, "ACS_VLINE", ord("|"))
+        border_attr = curses.color_pair(3) | curses.A_BOLD  # Green border
         try:
-            win.addch(0, 0, ul, curses.A_BOLD)
-            for col in range(1, width - 1):
-                win.addch(0, col, hline, curses.A_BOLD)
-            win.addch(0, width - 1, ur, curses.A_BOLD)
+            # Draw top border with title as part of it
+            win.addch(0, 0, ul, border_attr)
+            title_text = f" {title} "
+            title_len = len(title_text)
+            available_width = width - 2  # Space between corners
+            
+            if title_len < available_width:
+                # Calculate space for horizontal lines on both sides of title
+                remaining = available_width - title_len
+                left_hlines = remaining // 2
+                right_hlines = remaining - left_hlines
+                
+                # Draw left horizontal lines
+                for col in range(1, 1 + left_hlines):
+                    win.addch(0, col, hline, border_attr)
+                
+                # Draw title text (part of border, so green)
+                win.addstr(0, 1 + left_hlines, title_text, border_attr)
+                
+                # Draw right horizontal lines
+                for col in range(1 + left_hlines + title_len, width - 1):
+                    win.addch(0, col, hline, border_attr)
+            else:
+                # Title too long, just draw full line
+                for col in range(1, width - 1):
+                    win.addch(0, col, hline, border_attr)
+            
+            win.addch(0, width - 1, ur, border_attr)
 
             for row in range(1, height - 1):
-                win.addch(row, 0, vline, curses.A_BOLD)
-                win.addch(row, width - 1, vline, curses.A_BOLD)
+                win.addch(row, 0, vline, border_attr)
+                win.addch(row, width - 1, vline, border_attr)
 
-            win.addch(height - 1, 0, ll, curses.A_BOLD)
+            win.addch(height - 1, 0, ll, border_attr)
             for col in range(1, width - 1):
-                win.addch(height - 1, col, hline, curses.A_BOLD)
-            win.addch(height - 1, width - 1, lr, curses.A_BOLD)
-            title_text = f" {title} "
-            if len(title_text) < width - 2:
-                win.addstr(0, 2, title_text, curses.A_BOLD)
+                win.addch(height - 1, col, hline, border_attr)
+            win.addch(height - 1, width - 1, lr, border_attr)
         except curses.error:
             pass
 
@@ -287,9 +309,9 @@ class TerminalUI:
         )
 
         inner_width = width - 2
-        self.addstr(y + 1, x + 1, today_text, today_attr, inner_width)
+        self.addstr(y + 2, x + 1, today_text, today_attr, inner_width)
         if height >= 3:
-            self.addstr(y + 2, x + 1, week_text, week_attr, inner_width)
+            self.addstr(y + 4, x + 1, week_text, week_attr, inner_width)
         if height >= 4:
             message_attr = curses.color_pair(2) if self.message_error else curses.color_pair(3)
             self.addstr(y + 3, x + 1, self.message, message_attr, inner_width)
@@ -423,7 +445,7 @@ class TerminalUI:
         """Prompt for input; returns (text, cancelled). Esc cancels."""
         height, width = self.stdscr.getmaxyx()
         buffer: List[str] = []
-        box_width = max(30, min(width - 4, len(prompt_text) + 20))
+        box_width = max(50, min(width - 4, len(prompt_text) + 50))
         box_height = 5
         start_y = max((height - box_height) // 2, 0)
         start_x = max((width - box_width) // 2, 0)
@@ -438,7 +460,6 @@ class TerminalUI:
             while True:
                 win.erase()
                 self.draw_window_box(win, box_height, box_width, title)
-                win.addstr(1, 2, "Description:"[: box_width - 4], curses.A_DIM)
                 display = "".join(buffer)
                 win.addstr(2, 2, display[: box_width - 4])
                 win.move(2, min(2 + len(display), box_width - 3))

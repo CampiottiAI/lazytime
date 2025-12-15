@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import curses
+import re
 import textwrap
 from datetime import datetime, time, timedelta, timezone
 from typing import List, Tuple
 
-from .storage import Entry, append_entry, find_open, read_entries, write_entries, utc_now
+from .storage import (
+    Entry,
+    append_entry,
+    find_open,
+    parse_time_of_day,
+    read_entries,
+    write_entries,
+    utc_now,
+)
 
 
 def local_now() -> datetime:
@@ -483,10 +492,33 @@ class TerminalUI:
         self.message = text
         self.message_error = error
 
+    def parse_start_override(self, raw_text: str, now: datetime) -> tuple[str, datetime | None]:
+        """Extract @HH:MM override from text, returning cleaned text and local start time."""
+        match = re.search(r"@(?P<time>\d{1,2}:\d{2})", raw_text)
+        if not match:
+            return raw_text.strip(), None
+        time_text = match.group("time")
+        try:
+            hour, minute = parse_time_of_day(time_text)
+        except ValueError:
+            raise ValueError(f"Invalid start time: {time_text}") from None
+
+        cleaned = (raw_text[: match.start()] + raw_text[match.end() :]).strip()
+        cleaned = " ".join(cleaned.split())
+        tzinfo = now.astimezone().tzinfo
+        local_start = datetime.combine(now.astimezone().date(), time(hour=hour, minute=minute, tzinfo=tzinfo))
+        return cleaned, local_start
+
     def start_entry(self) -> None:
         text, cancelled = self.prompt("Start entry: ")
         if cancelled:
             self.notify("Start cancelled.", False)
+            return
+        now_local = local_now()
+        try:
+            text, override_start = self.parse_start_override(text, now_local)
+        except ValueError as exc:
+            self.notify(str(exc), True)
             return
         if not text:
             self.notify("Please enter a description.", True)
@@ -495,9 +527,14 @@ class TerminalUI:
         if find_open(entries) is not None:
             self.notify("An entry is already running.", True)
             return
-        append_entry(Entry(start=to_utc(local_now()), end=None, text=text))
+        start_local = override_start or now_local
+        if start_local > now_local:
+            self.notify("Start time cannot be in the future.", True)
+            return
+        append_entry(Entry(start=to_utc(start_local), end=None, text=text))
         self.reload_entries()
-        self.notify(f"Started: {text}", False)
+        suffix = f" @ {start_local.astimezone().strftime('%H:%M')}" if override_start else ""
+        self.notify(f"Started: {text}{suffix}", False)
 
     def stop_entry(self) -> None:
         entries = read_entries()

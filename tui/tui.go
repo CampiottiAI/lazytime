@@ -720,17 +720,21 @@ func (ui *TerminalUI) drawCommentLog(y, x, height, width int, now time.Time) {
 	}
 
 	innerWidth := width - 2
-	ui.addstr(y+2, x+1, todayText, todayStyle, innerWidth)
+	// Draw "Remaining today" text at the top with margin
+	ui.addstr(y+1, x+1, todayText, todayStyle, innerWidth)
+	// Draw "Remaining week" text
 	if height >= 3 {
-		ui.addstr(y+4, x+1, weekText, weekStyle, innerWidth)
+		ui.addstr(y+2, x+1, weekText, weekStyle, innerWidth)
 	}
-	if height >= 4 {
+	// Draw message at the bottom if it exists, with margin from top
+	if height >= 4 && ui.message != "" {
 		var messageStyle tcell.Style
 		if ui.messageError {
 			messageStyle = tcell.StyleDefault.Foreground(tcell.ColorRed)
 		} else {
 			messageStyle = tcell.StyleDefault.Foreground(tcell.ColorGreen)
 		}
+		// Place message below the time remaining text with margin
 		ui.addstr(y+3, x+1, ui.message, messageStyle, innerWidth)
 	}
 }

@@ -7,29 +7,30 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"lazytime/storage"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 // TerminalUI manages the terminal user interface.
 type TerminalUI struct {
-	screen        tcell.Screen
-	entries       []storage.Entry
-	message       string
-	messageError  bool
-	focusSection  string // "day" or "week"
-	dayOffset     int
-	weekOffset    int
-	timeout       int
+	screen       tcell.Screen
+	entries      []storage.Entry
+	message      string
+	messageError bool
+	focusSection string // "day" or "week"
+	dayOffset    int
+	weekOffset   int
+	timeout      int
 }
 
 // NewTerminalUI creates a new TerminalUI instance.
 func NewTerminalUI(s tcell.Screen) *TerminalUI {
 	ui := &TerminalUI{
 		screen:       s,
-		entries:     []storage.Entry{},
+		entries:      []storage.Entry{},
 		focusSection: "day",
-		timeout:     1000, // 1 second
+		timeout:      1000, // 1 second
 	}
 
 	s.SetStyle(tcell.StyleDefault)
@@ -741,7 +742,7 @@ func (ui *TerminalUI) drawCommentLog(y, x, height, width int, now time.Time) {
 
 // drawFooter draws the footer with help text.
 func (ui *TerminalUI) drawFooter(y, width int) {
-	helpLine := "[Tab] switch scroll target  [↑/↓] scroll  [n] start  [x] stop  [r] reload  [q] quit"
+	helpLine := "[Tab] switch scroll target  [↑/↓] scroll  [n] start  [x] stop  [r] reload  [e] help  [q] quit"
 	actionLine := "Actions: start new task, stop current, reload log"
 	ui.addstr(y, 0, helpLine, tcell.StyleDefault.Dim(true), width)
 	ui.addstr(y+1, 0, actionLine, tcell.StyleDefault.Dim(true), width)
@@ -807,6 +808,138 @@ func (ui *TerminalUI) Prompt(promptText string) (string, bool) {
 			if ev.Key() == tcell.KeyRune {
 				buffer = append(buffer, ev.Rune())
 			}
+		}
+	}
+}
+
+// ShowHelp displays a scrollable help window with TUI usage and tag information.
+func (ui *TerminalUI) ShowHelp() {
+	width, height := ui.screen.Size()
+	boxWidth := max(60, min(width-4, 80))
+	boxHeight := min(height-4, 30)
+	startY := max((height-boxHeight)/2, 0)
+	startX := max((width-boxWidth)/2, 0)
+
+	// Help content lines
+	helpLines := []string{
+		"TUI Usage:",
+		"",
+		"Navigation:",
+		"  Tab    - Switch scroll target (day/week)",
+		"  ↑/↓    - Scroll active pane",
+		"  k/j    - Scroll (vim keys)",
+		"",
+		"Actions:",
+		"  n      - Start new entry",
+		"  x      - Stop current entry",
+		"  r      - Reload log file",
+		"  q/Esc  - Quit",
+		"  e      - Show this help",
+		"",
+		"Time Overrides:",
+		"  @HH:MM - Backdate start time for today",
+		"  @HH:MM @HH:MM - Add completed entry",
+		"  Example: \"Task @09:00\" or \"Task @09:00 @10:30\"",
+		"",
+		"Panes:",
+		"  [1] Status - Shows IDLE or WORKING",
+		"  [2] Day summary - Today's entries",
+		"  [3] Week summary - This week's entries",
+		"  [4] Top tags - Most used tags this week",
+		"  [0] Current task - Active or last entry",
+		"  Comment log - Time remaining & messages",
+		"",
+		"Tags & Labels:",
+		"  Tags are words starting with # in entry text",
+		"  Example: \"Write docs #project #writing\"",
+		"  Multiple tags allowed per entry",
+		"  Time is counted toward each tag independently",
+		"  Entries without tags → (untagged)",
+		"  Tags are case-insensitive for grouping",
+		"  Original spelling is preserved in display",
+		"",
+		"Press Esc/q/e to close",
+	}
+
+	scrollOffset := 0
+
+	for {
+		// Draw main screen
+		ui.Draw()
+
+		// Draw help box
+		ui.drawBox(startY, startX, boxHeight, boxWidth, "Help - TUI Usage", true)
+
+		// Fill box interior with background
+		bgStyle := tcell.StyleDefault.Background(tcell.ColorBlack)
+		for row := startY + 1; row < startY+boxHeight-1; row++ {
+			for col := startX + 1; col < startX+boxWidth-1; col++ {
+				ui.screen.SetContent(col, row, ' ', nil, bgStyle)
+			}
+		}
+
+		// Expand lines that need wrapping
+		innerWidth := boxWidth - 2
+		var expandedLines []string
+		for _, line := range helpLines {
+			if len(line) <= innerWidth {
+				expandedLines = append(expandedLines, line)
+			} else {
+				// Word wrap this line
+				words := strings.Fields(line)
+				currentLine := ""
+				for _, word := range words {
+					testLine := currentLine
+					if testLine != "" {
+						testLine += " "
+					}
+					testLine += word
+					if len(testLine) > innerWidth && currentLine != "" {
+						expandedLines = append(expandedLines, currentLine)
+						currentLine = word
+					} else {
+						currentLine = testLine
+					}
+				}
+				if currentLine != "" {
+					expandedLines = append(expandedLines, currentLine)
+				}
+			}
+		}
+
+		// Display expanded lines with scrolling
+		innerHeight := boxHeight - 2
+		maxScroll := max(0, len(expandedLines)-innerHeight)
+		scrollOffset = min(scrollOffset, maxScroll)
+		displayStart := scrollOffset
+		displayEnd := min(displayStart+innerHeight, len(expandedLines))
+
+		style := tcell.StyleDefault
+		for i, line := range expandedLines[displayStart:displayEnd] {
+			ui.addstr(startY+1+i, startX+1, line, style, innerWidth)
+		}
+
+		ui.screen.Show()
+
+		ev := ui.screen.PollEvent()
+		switch ev := ev.(type) {
+		case *tcell.EventKey:
+			if ev.Key() == tcell.KeyEscape || ev.Rune() == 'q' || ev.Rune() == 'e' {
+				return
+			}
+			if ev.Key() == tcell.KeyUp || ev.Rune() == 'k' {
+				scrollOffset = max(0, scrollOffset-1)
+			} else if ev.Key() == tcell.KeyDown || ev.Rune() == 'j' {
+				scrollOffset = min(maxScroll, scrollOffset+1)
+			}
+		case *tcell.EventResize:
+			// Recalculate on resize
+			width, height = ui.screen.Size()
+			boxWidth = max(60, min(width-4, 80))
+			boxHeight = min(height-4, 30)
+			startY = max((height-boxHeight)/2, 0)
+			startX = max((width-boxWidth)/2, 0)
+			// maxScroll will be recalculated in next loop iteration
 		}
 	}
 }
@@ -1032,6 +1165,8 @@ func (ui *TerminalUI) Loop() {
 			} else if ev.Rune() == 'r' {
 				ui.reloadEntries()
 				ui.notify("Reloaded log.", false)
+			} else if ev.Rune() == 'e' {
+				ui.ShowHelp()
 			}
 		case *tcell.EventResize:
 			ui.screen.Sync()
@@ -1054,4 +1189,3 @@ func LaunchTUI() error {
 	ui.Loop()
 	return nil
 }
-

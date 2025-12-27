@@ -2,7 +2,30 @@
 
 Minimal CLI time logger inspired by gtimelog. Stores entries in a single text file (default `~/.pytimelog/log.txt`) using UTC timestamps and summarizes time by tags.
 
+Available in both Python and Go implementations. Both use the same log file format for compatibility.
+
 ## Quickstart
+
+### Go Implementation (Recommended)
+
+```bash
+go build -o pytimelog .
+./pytimelog start "Write docs #project"
+./pytimelog status
+./pytimelog stop
+./pytimelog report             # today's totals
+./pytimelog report --from 2024-01-01 --to 2024-01-07
+./pytimelog tui                # launch terminal UI
+```
+
+Or install globally:
+```bash
+go install .
+pytimelog start "Write docs #project"
+pytimelog tui
+```
+
+### Python Implementation
 
 ```bash
 pip install .  # or: python -m pip install -e .
@@ -31,7 +54,11 @@ The `ui` command launches a simple window similar to gtimelog: type what you're 
 
 ## Terminal UI
 
-Run `pytimelog tui` for a split-pane terminal view (inspired by lazygit) that shows today's or this week's entries, highlights the running entry, and lets you start/stop without leaving the keyboard.
+Run `pytimelog tui` (or `./pytimelog tui` if built locally) for a split-pane terminal view (inspired by lazygit) that shows today's or this week's entries, highlights the running entry, and lets you start/stop without leaving the keyboard.
+
+**Available in both Go and Python implementations.** The Go version uses tcell for terminal rendering.
+
+### Keyboard Shortcuts
 
 - `↑/↓` or `k/j` scroll the day/week panes (see footer for active target)
 - `Tab` switches scroll focus between day and week panes
@@ -40,7 +67,7 @@ Run `pytimelog tui` for a split-pane terminal view (inspired by lazygit) that sh
   - Include two times `@HH:MM @HH:MM` to add a completed entry immediately (start/end) without leaving one running
 - `x` stops the running entry
 - `r` reloads the log file
-- `q` quits
+- `q` or `Esc` quits
 
 ## Tagging details
 

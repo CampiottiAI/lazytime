@@ -272,7 +272,11 @@ func (m Model) View() string {
 // handleModalKey handles keyboard input when modal is shown.
 func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc":
+	case "esc", "e", "q":
+		if m.modalType == "help" {
+			m.showModal = false
+			return m, nil
+		}
 		m.showModal = false
 		m.modalInput = ""
 		m.modalSuggestions = []string{}
@@ -294,7 +298,7 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.modalSelected = min(len(m.modalSuggestions)-1, m.modalSelected+1)
 		}
 		return m, nil
-		default:
+	default:
 		// Handle text input
 		if m.modalType == "new" {
 			if msg.Type == tea.KeyRunes {
@@ -466,7 +470,6 @@ func (e *overlapError) Error() string {
 	return "entry overlaps with existing entry"
 }
 
-
 // parseTimeOverrides extracts @HH:MM tokens from text.
 // Returns cleaned text, optional start time, optional end time.
 func parseTimeOverrides(rawText string, now time.Time) (string, *time.Time, *time.Time, error) {
@@ -503,4 +506,3 @@ func parseTimeOverrides(rawText string, now time.Time) (string, *time.Time, *tim
 
 	return cleaned, &startLocal, endLocal, nil
 }
-

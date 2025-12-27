@@ -86,9 +86,9 @@ func renderMainView(m Model) string {
 	if m.viewMode == ViewMonth {
 		mainContent = components.RenderMonthHeatmap(m.entries, m.now, leftWidth, mainHeight, clampDuration, BoxStyle)
 	} else if m.viewMode == ViewWeek {
-		mainContent = renderWeekView(m.entries, startUTC, endUTC, m.now, leftWidth, mainHeight)
+		mainContent = renderWeekView(m.entries, startUTC, endUTC, m.now, leftWidth, mainHeight, m.scrollOffset)
 	} else if m.viewMode == ViewToday {
-		mainContent = renderTodayView(m.entries, startUTC, endUTC, m.now, leftWidth, mainHeight)
+		mainContent = renderTodayView(m.entries, startUTC, endUTC, m.now, leftWidth, mainHeight, m.scrollOffset)
 	} else {
 		groups := GroupByTag(m.entries, startUTC, endUTC, m.now)
 		// Convert to components.TagGroup
@@ -198,7 +198,7 @@ func renderModalView(m Model) string {
 }
 
 // renderTodayView renders a flat list of today's tasks sorted by completion time (most recent first).
-func renderTodayView(entries []storage.Entry, startUTC, endUTC, now time.Time, width, height int) string {
+func renderTodayView(entries []storage.Entry, startUTC, endUTC, now time.Time, width, height, scrollOffset int) string {
 	// Filter entries for today
 	var todayEntries []storage.Entry
 	for _, entry := range entries {
@@ -228,14 +228,10 @@ func renderTodayView(entries []storage.Entry, startUTC, endUTC, now time.Time, w
 	// Convert UTC times to local timezone for display
 	tz := now.Location()
 
-	var lines []string
-	maxLines := height - 2
-	lineCount := 0
+	// Build all lines first (without height limit)
+	var allLines []string
 
 	for _, entry := range todayEntries {
-		if lineCount >= maxLines {
-			break
-		}
 
 		// Convert start/end times to local timezone
 		startLocal := entry.Start.In(tz)
@@ -294,8 +290,34 @@ func renderTodayView(entries []storage.Entry, startUTC, endUTC, now time.Time, w
 			line = lipgloss.Place(availableWidth, 1, lipgloss.Left, lipgloss.Top, line)
 		}
 
-		lines = append(lines, line)
-		lineCount++
+		allLines = append(allLines, line)
+	}
+
+	// Calculate visible lines and apply scroll offset
+	visibleLines := height - 2
+	maxScrollOffset := 0
+	if len(allLines) > visibleLines {
+		maxScrollOffset = len(allLines) - visibleLines
+	}
+
+	// Clamp scroll offset
+	if scrollOffset > maxScrollOffset {
+		scrollOffset = maxScrollOffset
+	}
+	if scrollOffset < 0 {
+		scrollOffset = 0
+	}
+
+	// Apply scroll offset and limit to visible lines
+	startIdx := scrollOffset
+	endIdx := scrollOffset + visibleLines
+	if endIdx > len(allLines) {
+		endIdx = len(allLines)
+	}
+
+	var lines []string
+	if startIdx < len(allLines) {
+		lines = allLines[startIdx:endIdx]
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
@@ -303,7 +325,7 @@ func renderTodayView(entries []storage.Entry, startUTC, endUTC, now time.Time, w
 }
 
 // renderWeekView renders a list of the week's tasks grouped by day of the week.
-func renderWeekView(entries []storage.Entry, startUTC, endUTC, now time.Time, width, height int) string {
+func renderWeekView(entries []storage.Entry, startUTC, endUTC, now time.Time, width, height, scrollOffset int) string {
 	// Filter entries for the week
 	var weekEntries []storage.Entry
 	for _, entry := range entries {
@@ -353,9 +375,8 @@ func renderWeekView(entries []storage.Entry, startUTC, endUTC, now time.Time, wi
 		})
 	}
 
-	var lines []string
-	maxLines := height - 2
-	lineCount := 0
+	// Build all lines first (without height limit)
+	var allLines []string
 
 	// Determine today's day index (0=Monday, 6=Sunday)
 	todayLocal := now.In(tz)
@@ -379,21 +400,12 @@ func renderWeekView(entries []storage.Entry, startUTC, endUTC, now time.Time, wi
 			continue // Skip days with no entries
 		}
 
-		// Check if we have space for the day header
-		if lineCount >= maxLines {
-			break
-		}
-
 		// Day header: "> monday" (styled like tree headers)
 		dayHeader := "> " + TreeTagStyle.Render(dayNames[dayIndex])
-		lines = append(lines, dayHeader)
-		lineCount++
+		allLines = append(allLines, dayHeader)
 
 		// Add tasks for this day
 		for _, entry := range dayEntries {
-			if lineCount >= maxLines {
-				break
-			}
 
 			// Convert start/end times to local timezone
 			startLocal := entry.Start.In(tz)
@@ -452,13 +464,39 @@ func renderWeekView(entries []storage.Entry, startUTC, endUTC, now time.Time, wi
 				line = lipgloss.Place(availableWidth, 1, lipgloss.Left, lipgloss.Top, line)
 			}
 
-			lines = append(lines, line)
-			lineCount++
+			allLines = append(allLines, line)
 		}
 	}
 
-	if len(lines) == 0 {
+	if len(allLines) == 0 {
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).Render("No entries this week."))
+	}
+
+	// Calculate visible lines and apply scroll offset
+	visibleLines := height - 2
+	maxScrollOffset := 0
+	if len(allLines) > visibleLines {
+		maxScrollOffset = len(allLines) - visibleLines
+	}
+
+	// Clamp scroll offset
+	if scrollOffset > maxScrollOffset {
+		scrollOffset = maxScrollOffset
+	}
+	if scrollOffset < 0 {
+		scrollOffset = 0
+	}
+
+	// Apply scroll offset and limit to visible lines
+	startIdx := scrollOffset
+	endIdx := scrollOffset + visibleLines
+	if endIdx > len(allLines) {
+		endIdx = len(allLines)
+	}
+
+	var lines []string
+	if startIdx < len(allLines) {
+		lines = allLines[startIdx:endIdx]
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)

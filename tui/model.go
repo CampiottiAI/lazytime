@@ -46,6 +46,9 @@ type Model struct {
 	// Window size
 	width  int
 	height int
+
+	// Scroll state
+	scrollOffset int
 }
 
 // NewModel creates a new model instance.
@@ -57,6 +60,7 @@ func NewModel() *Model {
 		activeEntryIndex: -1,
 		width:            120,
 		height:           40,
+		scrollOffset:     0,
 	}
 	m.reloadEntries()
 	return m
@@ -102,10 +106,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "1":
 			m.viewMode = ViewToday
+			m.scrollOffset = 0 // Reset scroll when switching views
 		case "2":
 			m.viewMode = ViewWeek
+			m.scrollOffset = 0 // Reset scroll when switching views
 		case "3":
 			m.viewMode = ViewMonth
+			m.scrollOffset = 0 // Reset scroll when switching views
+		case "up", "k":
+			// Scroll up (only in Today or Week view)
+			if m.viewMode == ViewToday || m.viewMode == ViewWeek {
+				if m.scrollOffset > 0 {
+					m.scrollOffset--
+				}
+			}
+			return m, nil
+		case "down", "j":
+			// Scroll down (only in Today or Week view)
+			if m.viewMode == ViewToday || m.viewMode == ViewWeek {
+				m.scrollOffset++
+				// Will be clamped in render functions based on actual content
+			}
+			return m, nil
 		case "n":
 			m.showModal = true
 			m.modalType = "new"

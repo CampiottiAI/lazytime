@@ -207,7 +207,7 @@ func (ui *TerminalUI) drawStringOnScreen(s tcell.Screen, y, x int, text string, 
 
 // addstr safely adds a string with width constraint.
 func (ui *TerminalUI) addstr(y, x int, text string, style tcell.Style, width int) {
-	height, totalWidth := ui.screen.Size()
+	totalWidth, height := ui.screen.Size()
 	if y < 0 || y >= height {
 		return
 	}
@@ -442,7 +442,7 @@ func sum(values []int) int {
 func (ui *TerminalUI) Draw() {
 	ui.screen.Clear()
 	now := storage.UTCNow()
-	height, width := ui.screen.Size()
+	width, height := ui.screen.Size()
 	footerHeight := 2
 	contentHeight := max(0, height-footerHeight)
 	leftWidth := max(int(float64(width)*0.38), 28)
@@ -745,7 +745,7 @@ func (ui *TerminalUI) drawFooter(y, width int) {
 
 // Prompt shows a modal input dialog and returns the entered text and whether it was cancelled.
 func (ui *TerminalUI) Prompt(promptText string) (string, bool) {
-	height, width := ui.screen.Size()
+	width, height := ui.screen.Size()
 	buffer := []rune{}
 	boxWidth := max(50, min(width-4, len(promptText)+50))
 	boxHeight := 5
@@ -758,7 +758,7 @@ func (ui *TerminalUI) Prompt(promptText string) (string, bool) {
 	}
 
 	ui.screen.SetCursorStyle(tcell.CursorStyleBlinkingBlock)
-	ui.screen.ShowCursor(startY+2, startX+2)
+	ui.screen.ShowCursor(startX+2, startY+2)
 
 	for {
 		// Draw on main screen
@@ -773,7 +773,7 @@ func (ui *TerminalUI) Prompt(promptText string) (string, bool) {
 		}
 		ui.addstr(startY+2, startX+2, displayText, tcell.StyleDefault, boxWidth-4)
 		cursorX := startX + 2 + min(len(displayText), boxWidth-4)
-		ui.screen.ShowCursor(startY+2, cursorX)
+		ui.screen.ShowCursor(cursorX, startY+2)
 		ui.screen.Show()
 
 		ev := ui.screen.PollEvent()

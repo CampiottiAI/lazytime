@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"pytimelog/storage"
+	"lazytime/storage"
 )
 
 // TerminalUI manages the terminal user interface.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"pytimelog/storage"
+	"lazytime/storage"
 )
 
 // FormatDuration formats a duration as "XhYYm".

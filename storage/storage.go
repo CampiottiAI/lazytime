@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const LogEnvVar = "PYTIMELOG_PATH"
+const LogEnvVar = "LAZYTIME_PATH"
 
 // Entry represents a time log entry.
 type Entry struct {
@@ -44,7 +44,7 @@ func (e Entry) Tags() []string {
 }
 
 // DefaultLogPath returns the log file path from environment variable
-// or defaults to ~/.pytimelog/log.txt.
+// or defaults to ~/.lazytime/log.txt.
 func DefaultLogPath() string {
 	envValue := os.Getenv(LogEnvVar)
 	if envValue != "" {
@@ -53,9 +53,9 @@ func DefaultLogPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		// Fallback to current directory if home can't be determined
-		return ".pytimelog/log.txt"
+		return ".lazytime/log.txt"
 	}
-	return filepath.Join(home, ".pytimelog", "log.txt")
+	return filepath.Join(home, ".lazytime", "log.txt")
 }
 
 // ensureAware ensures a datetime has timezone info, defaulting to UTC.

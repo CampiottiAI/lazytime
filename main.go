@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"os"
 
-	"pytimelog/cli"
-	"pytimelog/tui"
+	"lazytime/cli"
+	"lazytime/tui"
 )
 
 func main() {
 	args := os.Args[1:]
 
 	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "Usage: pytimelog <command> [args...]\n")
+		fmt.Fprintf(os.Stderr, "Usage: lazytime <command> [args...]\n")
 		fmt.Fprintf(os.Stderr, "Commands: start, stop, add, status, report, tui\n")
 		os.Exit(1)
 	}

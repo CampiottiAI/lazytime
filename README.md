@@ -1,39 +1,24 @@
-# pytimelog
+# lazytime
 
-Minimal CLI time logger inspired by gtimelog. Stores entries in a single text file (default `~/.pytimelog/log.txt`) using UTC timestamps and summarizes time by tags.
-
-Available in both Python and Go implementations. Both use the same log file format for compatibility.
+Minimal CLI time logger inspired by gtimelog. Stores entries in a single text file (default `~/.lazytime/log.txt`) using UTC timestamps and summarizes time by tags.
 
 ## Quickstart
 
-### Go Implementation (Recommended)
-
 ```bash
-go build -o pytimelog .
-./pytimelog start "Write docs #project"
-./pytimelog status
-./pytimelog stop
-./pytimelog report             # today's totals
-./pytimelog report --from 2024-01-01 --to 2024-01-07
-./pytimelog tui                # launch terminal UI
+go build -o lazytime .
+./lazytime start "Write docs #project"
+./lazytime status
+./lazytime stop
+./lazytime report             # today's totals
+./lazytime report --from 2024-01-01 --to 2024-01-07
+./lazytime tui                # launch terminal UI
 ```
 
 Or install globally:
 ```bash
 go install .
-pytimelog start "Write docs #project"
-pytimelog tui
-```
-
-### Python Implementation
-
-```bash
-pip install .  # or: python -m pip install -e .
-pytimelog start "Write docs #project"
-pytimelog status
-pytimelog stop
-pytimelog report             # today's totals
-pytimelog report --from 2024-01-01 --to 2024-01-07
+lazytime start "Write docs #project"
+lazytime tui
 ```
 
 ## Commands
@@ -43,20 +28,13 @@ pytimelog report --from 2024-01-01 --to 2024-01-07
 - `add --start TIME --end TIME <text>` — add a finished entry retroactively; rejects overlaps.
 - `status` — show the current running entry, if any.
 - `report [--from DATE] [--to DATE] [--week|--last-week]` — totals by tag for a date or range (local dates, UTC storage), with shortcuts for this or last week.
-- `ui` — open a small Tk window to start/stop and view today's entries.
-- `tui` — open a curses terminal UI with lazygit-like panes and shortcuts.
+- `tui` — open a terminal UI with lazygit-like panes and shortcuts.
 
 Tags are parsed from `#tag` words in the text. Entries without tags roll up under `(untagged)`.
 
-## UI mode
-
-The `ui` command launches a simple window similar to gtimelog: type what you're doing and click **Start**, click **Stop** to finish, and see today's entries listed with durations. It uses the same log file as the CLI. Requires Tk (bundled with most Python installs).
-
 ## Terminal UI
 
-Run `pytimelog tui` (or `./pytimelog tui` if built locally) for a split-pane terminal view (inspired by lazygit) that shows today's or this week's entries, highlights the running entry, and lets you start/stop without leaving the keyboard.
-
-**Available in both Go and Python implementations.** The Go version uses tcell for terminal rendering.
+Run `lazytime tui` (or `./lazytime tui` if built locally) for a split-pane terminal view (inspired by lazygit) that shows today's or this week's entries, highlights the running entry, and lets you start/stop without leaving the keyboard. Uses tcell for terminal rendering.
 
 ### Keyboard Shortcuts
 

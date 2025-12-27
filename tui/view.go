@@ -28,7 +28,7 @@ func renderMainView(m Model) string {
 	heroHeight := 10
 	heroSection := components.RenderHero(m.entries, m.now, width,
 		BorderIdle, BorderRunning, StyleIdle, HeroTimerStyle, HeroTaskStyle, HeroTagStyle,
-		GetTagColor, FormatDuration, FormatDurationShort)
+		GetTagColor, FormatDuration, FormatDurationShort, FormatDurationFull, clampDuration)
 
 	// Tabs - convert ViewMode to components.ViewMode
 	var activeView components.ViewMode

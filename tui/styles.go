@@ -43,7 +43,7 @@ var (
 			Padding(1, 2)
 	BorderIdle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#888888")).
+			BorderForeground(lipgloss.Color("#ffff00")).
 			Padding(1, 2)
 	BorderPaused = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -82,7 +82,7 @@ var (
 	TreeTaskStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#cccccc"))
 	TreeDurationStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888"))
+				Foreground(lipgloss.Color("#888888"))
 
 	// Charts
 	ChartBarStyle = lipgloss.NewStyle().
@@ -90,7 +90,7 @@ var (
 	ChartLabelStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#ffffff"))
 	ChartPercentStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888"))
+				Foreground(lipgloss.Color("#888888"))
 
 	// Box styles
 	BoxStyle = lipgloss.NewStyle().
@@ -145,6 +145,15 @@ func FormatDuration(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
 
+// FormatDurationFull formats duration as HH:MM:SS (always includes hours, even if 00).
+func FormatDurationFull(d time.Duration) string {
+	totalSeconds := int(d.Seconds())
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds % 3600) / 60
+	seconds := totalSeconds % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+}
+
 // FormatDurationShort formats duration as compact string (e.g., "4h 30m").
 func FormatDurationShort(d time.Duration) string {
 	totalSeconds := int(d.Seconds())
@@ -160,4 +169,3 @@ func FormatDurationShort(d time.Duration) string {
 	}
 	return fmt.Sprintf("%ds", totalSeconds)
 }
-

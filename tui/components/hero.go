@@ -21,21 +21,62 @@ func removeTags(text string) string {
 }
 
 // RenderHero renders the hero section with large timer and current task info.
-func RenderHero(entries []storage.Entry, now time.Time, width int, borderIdle, borderRunning, styleIdle, heroTimerStyle, heroTaskStyle, heroTagStyle lipgloss.Style, getTagColor func(string) lipgloss.Color, formatDuration, formatDurationShort func(time.Duration) string) string {
+func RenderHero(entries []storage.Entry, now time.Time, width int, borderIdle, borderRunning, styleIdle, heroTimerStyle, heroTaskStyle, heroTagStyle lipgloss.Style, getTagColor func(string) lipgloss.Color, formatDuration, formatDurationShort, formatDurationFull func(time.Duration) string, clampDuration func(storage.Entry, time.Time, time.Time, time.Time) time.Duration) string {
 	idx := storage.FindOpen(entries)
 
 	var lines []string
 
 	if idx == -1 {
 		// No active task - show idle state
-		lines = append(lines, lipgloss.Place(width-4, 1, lipgloss.Center, lipgloss.Center, styleIdle.Render("IDLE")))
+		// Calculate idle duration: time since last entry ended (or 00:00:00 if no entries today)
+		tz := now.Location()
+		today := now
+		todayStart := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, tz)
+		todayEnd := todayStart.AddDate(0, 0, 1)
+		todayStartUTC := storage.ToUTC(todayStart)
+		todayEndUTC := storage.ToUTC(todayEnd)
+
+		// Filter entries for today
+		var todayEntries []storage.Entry
+		for _, entry := range entries {
+			if clampDuration(entry, todayStartUTC, todayEndUTC, now) > 0 {
+				todayEntries = append(todayEntries, entry)
+			}
+		}
+
+		var idleDuration time.Duration
+		if len(todayEntries) == 0 {
+			// No entries today - show 00:00:00
+			idleDuration = 0
+		} else {
+			// Find the most recent entry's end time
+			var lastEnd time.Time
+			for _, entry := range todayEntries {
+				entryEnd := now
+				if entry.End != nil {
+					entryEnd = *entry.End
+				}
+				if entryEnd.After(lastEnd) {
+					lastEnd = entryEnd
+				}
+			}
+			// Calculate idle duration from last entry end to now
+			idleDuration = now.Sub(lastEnd)
+			if idleDuration < 0 {
+				idleDuration = 0
+			}
+		}
+
+		// Format idle duration as HH:MM:SS
+		idleText := formatDurationFull(idleDuration)
+		lines = append(lines, lipgloss.Place(width-4, 1, lipgloss.Center, lipgloss.Center, styleIdle.Render("IDLE "+idleText)))
 	} else {
 		// Active task - show compact status with elapsed time and task description
 		entry := entries[idx]
 		elapsed := entry.Duration(now)
 
-		// Format elapsed time in big bold green
-		timerText := formatDuration(elapsed)
+		// Format elapsed time in big bold green (always HH:MM:SS)
+		timerText := formatDurationFull(elapsed)
 		styledTimer := heroTimerStyle.Render(timerText)
 
 		// Get task description without tags

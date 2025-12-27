@@ -88,17 +88,23 @@ func GroupByTag(entries []storage.Entry, startUTC, endUTC, now time.Time) []TagG
 			})
 		}
 
-		// Sort tasks by duration (descending)
+		// Sort tasks by duration (descending), then alphabetically by text
 		sort.Slice(group.TaskList, func(i, j int) bool {
-			return group.TaskList[i].Duration > group.TaskList[j].Duration
+			if group.TaskList[i].Duration != group.TaskList[j].Duration {
+				return group.TaskList[i].Duration > group.TaskList[j].Duration
+			}
+			return group.TaskList[i].Text < group.TaskList[j].Text
 		})
 
 		groups = append(groups, *group)
 	}
 
-	// Sort groups by duration (descending)
+	// Sort groups by duration (descending), then alphabetically by tag
 	sort.Slice(groups, func(i, j int) bool {
-		return groups[i].Duration > groups[j].Duration
+		if groups[i].Duration != groups[j].Duration {
+			return groups[i].Duration > groups[j].Duration
+		}
+		return groups[i].Tag < groups[j].Tag
 	})
 
 	return groups

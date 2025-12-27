@@ -38,9 +38,12 @@ func RenderTagChart(totals map[string]time.Duration, width, height int, chartBar
 		}
 	}
 
-	// Sort by duration (descending)
+	// Sort by duration (descending), then alphabetically by tag
 	sort.Slice(items, func(i, j int) bool {
-		return items[i].Duration > items[j].Duration
+		if items[i].Duration != items[j].Duration {
+			return items[i].Duration > items[j].Duration
+		}
+		return items[i].Tag < items[j].Tag
 	})
 
 	// Limit to available height

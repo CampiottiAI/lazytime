@@ -24,17 +24,11 @@ func renderMainView(m Model) string {
 	footerHeight := 2
 	contentHeight := height - footerHeight
 
-	// Hero section (full width at top)
-	heroHeight := 8
+	// Hero section (full width at top) - make it bigger
+	heroHeight := 10
 	heroSection := components.RenderHero(m.entries, m.now, width,
 		BorderIdle, BorderRunning, StyleIdle, HeroTimerStyle, HeroTaskStyle, HeroTagStyle,
 		GetTagColor, FormatDuration, FormatDurationShort)
-
-	// Remaining space for main content
-	mainHeight := contentHeight - heroHeight
-	if mainHeight < 5 {
-		mainHeight = 5
-	}
 
 	// Tabs - convert ViewMode to components.ViewMode
 	var activeView components.ViewMode
@@ -45,10 +39,42 @@ func renderMainView(m Model) string {
 		activeView = components.ViewWeek
 	}
 	tabsSection := components.RenderTabs(activeView, width, TabActive, TabInactive)
+	tabsHeight := 1 // Tabs are single line
+	verticalSpacing := 2 // Space between hero and tabs to shift content down
+
+	// Calculate available space for main content and sidebar
+	availableHeight := contentHeight - heroHeight - tabsHeight - verticalSpacing
+	if availableHeight < 10 {
+		availableHeight = 10
+	}
 
 	// Main content area (left) and sidebar (right)
 	leftWidth := int(float64(width) * 0.50)
 	rightWidth := width - leftWidth - 1
+
+	// Calculate sidebar height first
+	goalsHeight := 6 // Fixed height for goals box
+	sidebarSpacing := 1 // Space between goals and heatmap
+	// Calculate tagsHeight to use remaining space, ensuring minimum height
+	tagsHeight := availableHeight - goalsHeight - sidebarSpacing
+	if tagsHeight < 3 {
+		tagsHeight = 3
+		// Adjust goalsHeight if needed
+		if goalsHeight+sidebarSpacing+tagsHeight > availableHeight {
+			goalsHeight = availableHeight - sidebarSpacing - tagsHeight
+			if goalsHeight < 3 {
+				goalsHeight = 3
+			}
+		}
+	}
+	// Sidebar total height
+	sidebarHeight := goalsHeight + sidebarSpacing + tagsHeight
+
+	// Set main content height to match sidebar height
+	mainHeight := sidebarHeight
+	if mainHeight < 5 {
+		mainHeight = 5
+	}
 
 	// Calculate time ranges based on view mode
 	var startUTC, endUTC time.Time
@@ -104,16 +130,7 @@ func renderMainView(m Model) string {
 		mainContent = components.RenderTree(compGroups, leftWidth, mainHeight, TreeTagStyle, TreeTaskStyle, TreeDurationStyle, BoxStyle, GetTagColor, FormatDurationShort)
 	}
 
-	// Sidebar: Goals and Tags
-	goalsHeight := 6 // Fixed smaller height for goals box
-	tagsHeight := mainHeight - goalsHeight - 1
-	if goalsHeight < 3 {
-		goalsHeight = 3
-	}
-	if tagsHeight < 3 {
-		tagsHeight = 3
-	}
-
+	// Sidebar: Goals and Tags (heights already calculated above)
 	goalsSection := components.RenderGoalProgress(m.entries, m.now, m.targetToday, m.targetWeek, rightWidth, clampDuration, GetProgressColor, FormatDurationShort)
 	goalsBox := BoxStyle.Width(rightWidth).Height(goalsHeight).Render(goalsSection)
 
@@ -127,13 +144,15 @@ func renderMainView(m Model) string {
 	// Footer
 	footer := renderFooter(width)
 
-	// Combine everything
-	return lipgloss.JoinVertical(lipgloss.Left,
-		heroSection,
-		tabsSection,
-		contentRow,
-		footer,
-	)
+	// Combine everything with spacing
+	var verticalElements []string
+	verticalElements = append(verticalElements, heroSection)
+	// Add vertical spacing
+	for i := 0; i < verticalSpacing; i++ {
+		verticalElements = append(verticalElements, "")
+	}
+	verticalElements = append(verticalElements, tabsSection, contentRow, footer)
+	return lipgloss.JoinVertical(lipgloss.Left, verticalElements...)
 }
 
 // renderModalView renders the modal overlay.

@@ -124,8 +124,8 @@ func RenderMonthHeatmap(entries []storage.Entry, now time.Time, width, height in
 	// Calculate available space (accounting for box padding: 1 top/bottom, 2 left/right)
 	boxPaddingH := 2 * 2 // left + right padding
 	boxPaddingV := 1 * 2 // top + bottom padding
-	headerHeight := 2     // "Last 30 Days" + empty line
-	spacing := 1          // spacing between squares
+	headerHeight := 2    // "Last 30 Days" + empty line
+	spacing := 1         // spacing between squares
 
 	availableWidth := width - boxPaddingH
 	availableHeight := height - boxPaddingV - headerHeight

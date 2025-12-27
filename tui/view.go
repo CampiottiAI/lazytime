@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"lazytime/tui/components"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // renderMainView renders the main application view.
@@ -26,7 +27,7 @@ func renderMainView(m Model) string {
 
 	// Hero section (full width at top) - make it bigger
 	heroHeight := 10
-	heroSection := components.RenderHero(m.entries, m.now, width,
+	heroSection := components.RenderHero(m.entries, m.now, width-2,
 		BorderIdle, BorderRunning, StyleIdle, HeroTimerStyle, HeroTaskStyle, HeroTagStyle,
 		GetTagColor, FormatDuration, FormatDurationShort, FormatDurationFull, clampDuration)
 
@@ -39,7 +40,7 @@ func renderMainView(m Model) string {
 		activeView = components.ViewWeek
 	}
 	tabsSection := components.RenderTabs(activeView, width, TabActive, TabInactive)
-	tabsHeight := 1 // Tabs are single line
+	tabsHeight := 1      // Tabs are single line
 	verticalSpacing := 2 // Space between hero and tabs to shift content down
 
 	// Calculate available space for main content and sidebar
@@ -50,10 +51,10 @@ func renderMainView(m Model) string {
 
 	// Main content area (left) and sidebar (right)
 	leftWidth := int(float64(width) * 0.50)
-	rightWidth := width - leftWidth - 1
+	rightWidth := width - leftWidth - 5
 
 	// Calculate sidebar height first
-	goalsHeight := 6 // Fixed height for goals box
+	goalsHeight := 6    // Fixed height for goals box
 	sidebarSpacing := 1 // Space between goals and heatmap
 	// Calculate tagsHeight to use remaining space, ensuring minimum height
 	tagsHeight := availableHeight - goalsHeight - sidebarSpacing

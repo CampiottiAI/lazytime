@@ -227,6 +227,8 @@ func renderTodayView(entries []storage.Entry, startUTC, endUTC, now time.Time, w
 	var allLines []string
 
 	for _, entry := range todayEntries {
+		// Check if this is an active task (currently being worked on)
+		isActive := entry.End == nil
 
 		// Convert start/end times to local timezone
 		startLocal := entry.Start.In(tz)
@@ -235,8 +237,13 @@ func renderTodayView(entries []storage.Entry, startUTC, endUTC, now time.Time, w
 			endLocal = entry.End.In(tz)
 		}
 
-		// Format time range
-		timeRange := startLocal.Format("15:04") + " - " + endLocal.Format("15:04")
+		// Format time range - show "DNF" for active tasks
+		var timeRange string
+		if isActive {
+			timeRange = startLocal.Format("15:04") + " - DNF"
+		} else {
+			timeRange = startLocal.Format("15:04") + " - " + endLocal.Format("15:04")
+		}
 
 		// Extract task text without tags
 		taskText := removeTags(entry.Text)
@@ -283,6 +290,11 @@ func renderTodayView(entries []storage.Entry, startUTC, endUTC, now time.Time, w
 		if lipgloss.Width(line) > availableWidth {
 			// Use lipgloss to truncate while preserving ANSI codes
 			line = lipgloss.Place(availableWidth, 1, lipgloss.Left, lipgloss.Top, line)
+		}
+
+		// Apply green styling to active tasks
+		if isActive {
+			line = StyleRunning.Render(line)
 		}
 
 		allLines = append(allLines, line)
@@ -401,6 +413,8 @@ func renderWeekView(entries []storage.Entry, startUTC, endUTC, now time.Time, wi
 
 		// Add tasks for this day
 		for _, entry := range dayEntries {
+			// Check if this is an active task (currently being worked on)
+			isActive := entry.End == nil
 
 			// Convert start/end times to local timezone
 			startLocal := entry.Start.In(tz)
@@ -409,8 +423,13 @@ func renderWeekView(entries []storage.Entry, startUTC, endUTC, now time.Time, wi
 				endLocal = entry.End.In(tz)
 			}
 
-			// Format time range
-			timeRange := startLocal.Format("15:04") + " - " + endLocal.Format("15:04")
+			// Format time range - show "DNF" for active tasks
+			var timeRange string
+			if isActive {
+				timeRange = startLocal.Format("15:04") + " - DNF"
+			} else {
+				timeRange = startLocal.Format("15:04") + " - " + endLocal.Format("15:04")
+			}
 
 			// Extract task text without tags
 			taskText := removeTags(entry.Text)
@@ -457,6 +476,11 @@ func renderWeekView(entries []storage.Entry, startUTC, endUTC, now time.Time, wi
 			if lipgloss.Width(line) > availableWidth {
 				// Use lipgloss to truncate while preserving ANSI codes
 				line = lipgloss.Place(availableWidth, 1, lipgloss.Left, lipgloss.Top, line)
+			}
+
+			// Apply green styling to active tasks
+			if isActive {
+				line = StyleRunning.Render(line)
 			}
 
 			allLines = append(allLines, line)
